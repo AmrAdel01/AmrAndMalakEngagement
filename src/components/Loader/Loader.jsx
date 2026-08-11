@@ -18,7 +18,7 @@ export default function Loader() {
         transition={{ duration: 1.4, repeat: Infinity, repeatType: "reverse", ease: "easeInOut" }}
         className="font-display italic text-2xl md:text-3xl text-ink-600"
       >
-        Loading our story...
+        Loading our invitation...
       </motion.span>
       <span className="w-14 h-px bg-gold-400 mt-6" />
     </motion.div>
