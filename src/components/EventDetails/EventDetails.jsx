@@ -1,4 +1,4 @@
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar, Clock, MapPin } from "lucide-react";
 import Reveal from "../common/Reveal";
 import ThreadDivider from "../Decorative/ThreadDivider";
 import { eventData } from "../../data/eventData";
@@ -21,6 +21,10 @@ export default function EventDetails() {
             <span className="flex items-center gap-2 text-sm md:text-base">
               <Calendar size={16} strokeWidth={1.5} className="text-gold-500" />
               {event.displayDate}
+            </span>
+            <span className="flex items-center gap-2 text-sm md:text-base">
+              <Clock size={16} strokeWidth={1.5} className="text-gold-500" />
+              {event.displayTime}
             </span>
             <span className="flex items-center gap-2 text-sm md:text-base">
               <MapPin size={16} strokeWidth={1.5} className="text-gold-500" />

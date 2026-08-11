@@ -11,8 +11,9 @@ export const eventData = {
 
   event: {
     title: "Our Engagement",
-    isoDateTime: "2026-08-22T18:00:00+02:00",
+    isoDateTime: "2026-08-22T20:00:00+03:00",
     displayDate: "22 August 2026",
+    displayTime: "8:00 PM - 12:00 AM",
     dateMark: "22 • 08 • 2026",
     venue: "G Island",
     location: "Maadi Corniche, Cairo, Egypt",
@@ -70,7 +71,7 @@ export const eventData = {
   },
 
   social: {
-    whatsappShareText: "You're invited to celebrate our engagement — 22 August 2026 💛",
+    whatsappShareText: "You're invited to celebrate our engagement — 22 August 2026, 8:00 PM - 12:00 AM 💛",
   },
 
   navigation: [

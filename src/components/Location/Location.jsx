@@ -1,4 +1,4 @@
-import { MapPin, Navigation, CalendarPlus } from "lucide-react";
+import { MapPin, Navigation, CalendarPlus, Clock } from "lucide-react";
 import Reveal from "../common/Reveal";
 import SectionHeading from "../common/SectionHeading";
 import { eventData } from "../../data/eventData";
@@ -10,7 +10,7 @@ export default function Location() {
   const handleSaveDate = () => {
     downloadIcsEvent({
       title: `${couple.combinedNames} — ${event.title}`,
-      description: `Join us as we celebrate our engagement.`,
+      description: `Join us as we celebrate our engagement from ${event.displayTime}.`,
       location: event.address,
       isoDateTime: event.isoDateTime,
     });
@@ -29,6 +29,10 @@ export default function Location() {
             </h3>
             <p className="font-body text-ink-400 text-sm md:text-base mb-8">
               {event.address}
+            </p>
+            <p className="mb-8 -mt-4 inline-flex items-center justify-center gap-2 font-body text-sm md:text-base text-ink-500">
+              <Clock size={15} strokeWidth={1.5} className="text-gold-500" />
+              {event.displayTime}
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4">

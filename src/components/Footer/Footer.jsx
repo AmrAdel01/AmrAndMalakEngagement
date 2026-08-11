@@ -15,7 +15,7 @@ export default function Footer() {
           {couple.combinedNames}
         </h3>
         <p className="font-body text-ink-400 text-xs sm:text-sm mb-8 px-2">
-          {event.displayDate} · {event.venue}, {event.location.split(",")[0]}
+          {event.displayDate} - {event.displayTime} - {event.venue}, {event.location.split(",")[0]}
         </p>
 
         <div className="flex justify-center mb-10">
