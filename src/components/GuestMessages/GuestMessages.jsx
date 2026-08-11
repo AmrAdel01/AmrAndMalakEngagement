@@ -133,6 +133,8 @@ export default function GuestMessages() {
       setText("");
       setJustSent(true);
       setTimeout(() => setJustSent(false), 2800);
+    } catch (error) {
+      setFormError(error.message || "Unable to send your message right now.");
     } finally {
       setSubmitting(false);
     }

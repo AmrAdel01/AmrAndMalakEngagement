@@ -1,8 +1,28 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { neon } from "@neondatabase/serverless";
 
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 12;
+const RATE_LIMIT_MAX = 5;
+const RATE_LIMIT_WINDOW_MINUTES = 10;
+const RATE_LIMIT_CLEANUP_MINUTES = 60;
+
+const BLOCKED_NAME_PATTERNS = [
+  /^RL_\d+$/i,
+  /^CORStest$/i,
+  /^SecTest$/i,
+  /^anonymous$/i,
+  /^ann?onymous$/i,
+];
+
+const BLOCKED_TEXT_PATTERNS = [
+  /^Rate limit test \d+$/i,
+  /^CORS test$/i,
+  /^test$/i,
+];
+
+const UNSAFE_MARKUP_PATTERN =
+  /<\s*\/?\s*[a-z!]|on[a-z]+\s*=|javascript\s*:|data\s*:/i;
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -12,7 +32,16 @@ function json(res, status, body) {
 }
 
 function cleanText(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
+  return String(value || "")
+    .split("")
+    .map((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127 ? " " : char;
+    })
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
 }
 
 function parsePageValue(value, fallback) {
@@ -37,6 +66,105 @@ async function ensureSchema(sql) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS guest_message_rate_limits (
+      client_key TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS guest_message_rate_limits_client_created_idx
+    ON guest_message_rate_limits (client_key, created_at DESC)
+  `;
+}
+
+async function deleteKnownSpam(sql) {
+  await sql`
+    DELETE FROM guest_messages
+    WHERE
+      name ~* '^RL_[0-9]+$'
+      OR name ~* '^CORStest$'
+      OR name ~* '^SecTest$'
+      OR name ~* '^ann?onymous$'
+      OR message ~* '^Rate limit test [0-9]+$'
+      OR message ~* '^CORS test$'
+      OR message ~* '<[[:space:]]*/?[[:space:]]*[[:alpha:]!]+'
+      OR message ~* 'javascript[[:space:]]*:'
+  `;
+}
+
+function getRequestHost(req) {
+  const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
+  return forwardedHost || req.headers.host || "";
+}
+
+function isSameOriginPost(req) {
+  const requestHost = getRequestHost(req);
+  const origin = req.headers.origin;
+  const referer = req.headers.referer;
+  const source = origin || referer;
+
+  if (!requestHost || !source) {
+    return false;
+  }
+
+  try {
+    const sourceHost = new URL(source).host;
+    return sourceHost === requestHost;
+  } catch {
+    return false;
+  }
+}
+
+function isBlockedContent(name, text) {
+  return (
+    UNSAFE_MARKUP_PATTERN.test(name) ||
+    UNSAFE_MARKUP_PATTERN.test(text) ||
+    BLOCKED_NAME_PATTERNS.some((pattern) => pattern.test(name)) ||
+    BLOCKED_TEXT_PATTERNS.some((pattern) => pattern.test(text))
+  );
+}
+
+function getClientKey(req) {
+  const forwardedFor = String(req.headers["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  const ip = forwardedFor || req.headers["x-real-ip"] || req.socket?.remoteAddress || "unknown";
+  const userAgent = req.headers["user-agent"] || "unknown";
+  const salt = process.env.MESSAGE_RATE_LIMIT_SALT || "engagement-guestbook";
+
+  return createHash("sha256").update(`${salt}:${ip}:${userAgent}`).digest("hex");
+}
+
+async function assertRateLimit(req, res, sql) {
+  const clientKey = getClientKey(req);
+
+  await sql`
+    DELETE FROM guest_message_rate_limits
+    WHERE created_at < NOW() - (${RATE_LIMIT_CLEANUP_MINUTES} * INTERVAL '1 minute')
+  `;
+
+  const rows = await sql`
+    SELECT COUNT(*)::int AS count
+    FROM guest_message_rate_limits
+    WHERE
+      client_key = ${clientKey}
+      AND created_at > NOW() - (${RATE_LIMIT_WINDOW_MINUTES} * INTERVAL '1 minute')
+  `;
+
+  if (Number(rows[0]?.count || 0) >= RATE_LIMIT_MAX) {
+    json(res, 429, { error: "Too many messages. Please try again later." });
+    return false;
+  }
+
+  await sql`
+    INSERT INTO guest_message_rate_limits (client_key)
+    VALUES (${clientKey})
+  `;
+
+  return true;
 }
 
 async function listMessages(req, res, sql) {
@@ -61,6 +189,11 @@ async function listMessages(req, res, sql) {
 }
 
 async function createMessage(req, res, sql) {
+  if (!isSameOriginPost(req)) {
+    json(res, 403, { error: "Message submissions must come from this website." });
+    return;
+  }
+
   let payload;
 
   try {
@@ -81,6 +214,16 @@ async function createMessage(req, res, sql) {
 
   if (!name || !text) {
     json(res, 400, { error: "Name and message are required." });
+    return;
+  }
+
+  if (isBlockedContent(name, text)) {
+    json(res, 400, { error: "Please use a real name and message without test text or HTML." });
+    return;
+  }
+
+  const allowed = await assertRateLimit(req, res, sql);
+  if (!allowed) {
     return;
   }
 
@@ -130,6 +273,7 @@ export default async function handler(req, res) {
 
   try {
     await ensureSchema(sql);
+    await deleteKnownSpam(sql);
 
     if (req.method === "GET") {
       await listMessages(req, res, sql);
