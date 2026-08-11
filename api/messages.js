@@ -83,6 +83,20 @@ async function ensureSchema(sql) {
 }
 
 async function deleteKnownSpam(sql) {
+  const exactSpamMessages = [
+    "test",
+    "CORS test",
+    "' OR 'x'='x",
+    "admin'--",
+    "' OR EXISTS(SELECT * FROM users)--",
+    "' AND 1=SLEEP(5)--",
+    "'; DROP TABLE messages; --",
+    "1' UNION SELECT NULL--",
+    "' OR 1=1--",
+    "' OR '1'='1",
+    "''",
+  ];
+
   await sql`
     DELETE FROM guest_messages
     WHERE
@@ -91,17 +105,10 @@ async function deleteKnownSpam(sql) {
       OR name ~* '^SecTest$'
       OR name ~* '^ann?onymous$'
       OR message ~* '^Rate limit test [0-9]+$'
-      OR message ~* '^CORS test$'
-      OR message ~* '<[[:space:]]*/?[[:space:]]*[[:alpha:]!]+'
-      OR message ~* 'javascript[[:space:]]*:'
-      OR (name || ' ' || message) LIKE '%--%'
-      OR (name || ' ' || message) ~* ';[[:space:]]*(drop|delete|insert|update|alter|truncate)[[:space:]]+'
-      OR (name || ' ' || message) ~* 'union[[:space:]]+select'
-      OR (name || ' ' || message) ~* 'exists[[:space:]]*\([[:space:]]*select'
-      OR (name || ' ' || message) ~* 'sleep[[:space:]]*\('
-      OR (name || ' ' || message) ~* '[[:space:]](or|and)[[:space:]][^[:cntrl:]]*='
-      OR trim(name) IN ('''', '''''')
-      OR trim(message) IN ('''', '''''')
+      OR message ILIKE '%<script%'
+      OR message ILIKE '%javascript:%'
+      OR name = ANY(${exactSpamMessages})
+      OR message = ANY(${exactSpamMessages})
   `;
 }
 

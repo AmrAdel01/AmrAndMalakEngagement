@@ -91,7 +91,11 @@ export function useGuestMessages() {
       const response = await fetch(`/api/messages?limit=${PAGE_SIZE}&offset=${offset}`);
 
       if (!response.ok) {
-        throw new Error("Database unavailable");
+        if (response.status === 503) {
+          throw new Error("Database unavailable");
+        }
+
+        throw new Error(await readErrorMessage(response));
       }
 
       const data = await response.json();
@@ -100,13 +104,17 @@ export function useGuestMessages() {
       setUsingLocalFallback(false);
       setTotal(Number(data.total || nextMessages.length));
       setMessages((prev) => (reset ? nextMessages : [...prev, ...nextMessages]));
-    } catch {
+    } catch (error) {
       const localMessages = readLocalMessages();
 
       setUsingLocalFallback(true);
       setTotal(localMessages.length);
       setMessages(localMessages);
-      setError("Database is not connected yet, so messages are only saved on this device.");
+      setError(
+        error.message === "Database unavailable"
+          ? "Database is not connected yet, so messages are only saved on this device."
+          : "Guest messages are temporarily unavailable. Please refresh in a moment.",
+      );
     } finally {
       setLoading(false);
       setLoadingMore(false);
