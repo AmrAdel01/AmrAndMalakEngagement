@@ -5,6 +5,8 @@ const STORAGE_KEY = "engagement-guest-messages-fresh-start";
 const PAGE_SIZE = 12;
 const UNSAFE_MARKUP_PATTERN =
   /<\s*\/?\s*[a-z!]|on[a-z]+\s*=|javascript\s*:|data\s*:/i;
+const UNSAFE_SQL_PATTERN =
+  /(--|;\s*(drop|delete|insert|update|alter|truncate)\b|\bunion\s+select\b|\bexists\s*\(\s*select\b|\bsleep\s*\(|\b(or|and)\b\s+['"`]?\w+['"`]?\s*=\s*['"`]?\w+['"`]?|^'+$)/i;
 const BLOCKED_NAME_PATTERNS = [
   /^RL_\d+$/i,
   /^CORStest$/i,
@@ -52,6 +54,8 @@ function isBlockedContent(name = "", text = "") {
   return (
     UNSAFE_MARKUP_PATTERN.test(normalizedName) ||
     UNSAFE_MARKUP_PATTERN.test(normalizedText) ||
+    UNSAFE_SQL_PATTERN.test(normalizedName) ||
+    UNSAFE_SQL_PATTERN.test(normalizedText) ||
     BLOCKED_NAME_PATTERNS.some((pattern) => pattern.test(normalizedName)) ||
     BLOCKED_TEXT_PATTERNS.some((pattern) => pattern.test(normalizedText))
   );
@@ -128,7 +132,7 @@ export function useGuestMessages() {
     if (!trimmedName || !trimmedText) return null;
 
     if (isBlockedContent(trimmedName, trimmedText)) {
-      throw new Error("Please use a real name and message without test text or HTML.");
+      throw new Error("Please use a real name and message without test text, HTML, or SQL.");
     }
 
     const payload = { name: trimmedName, text: trimmedText };

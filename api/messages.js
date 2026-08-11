@@ -23,6 +23,8 @@ const BLOCKED_TEXT_PATTERNS = [
 
 const UNSAFE_MARKUP_PATTERN =
   /<\s*\/?\s*[a-z!]|on[a-z]+\s*=|javascript\s*:|data\s*:/i;
+const UNSAFE_SQL_PATTERN =
+  /(--|;\s*(drop|delete|insert|update|alter|truncate)\b|\bunion\s+select\b|\bexists\s*\(\s*select\b|\bsleep\s*\(|\b(or|and)\b\s+['"`]?\w+['"`]?\s*=\s*['"`]?\w+['"`]?|^'+$)/i;
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -92,6 +94,14 @@ async function deleteKnownSpam(sql) {
       OR message ~* '^CORS test$'
       OR message ~* '<[[:space:]]*/?[[:space:]]*[[:alpha:]!]+'
       OR message ~* 'javascript[[:space:]]*:'
+      OR (name || ' ' || message) LIKE '%--%'
+      OR (name || ' ' || message) ~* ';[[:space:]]*(drop|delete|insert|update|alter|truncate)[[:space:]]+'
+      OR (name || ' ' || message) ~* 'union[[:space:]]+select'
+      OR (name || ' ' || message) ~* 'exists[[:space:]]*\([[:space:]]*select'
+      OR (name || ' ' || message) ~* 'sleep[[:space:]]*\('
+      OR (name || ' ' || message) ~* '[[:space:]](or|and)[[:space:]][^[:cntrl:]]*='
+      OR trim(name) IN ('''', '''''')
+      OR trim(message) IN ('''', '''''')
   `;
 }
 
@@ -122,6 +132,8 @@ function isBlockedContent(name, text) {
   return (
     UNSAFE_MARKUP_PATTERN.test(name) ||
     UNSAFE_MARKUP_PATTERN.test(text) ||
+    UNSAFE_SQL_PATTERN.test(name) ||
+    UNSAFE_SQL_PATTERN.test(text) ||
     BLOCKED_NAME_PATTERNS.some((pattern) => pattern.test(name)) ||
     BLOCKED_TEXT_PATTERNS.some((pattern) => pattern.test(text))
   );
@@ -218,7 +230,7 @@ async function createMessage(req, res, sql) {
   }
 
   if (isBlockedContent(name, text)) {
-    json(res, 400, { error: "Please use a real name and message without test text or HTML." });
+    json(res, 400, { error: "Please use a real name and message without test text, HTML, or SQL." });
     return;
   }
 
