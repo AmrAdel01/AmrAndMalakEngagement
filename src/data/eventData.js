@@ -15,11 +15,12 @@ export const eventData = {
     displayDate: "22 August 2026",
     displayTime: "8:00 PM - 12:00 AM",
     dateMark: "22 • 08 • 2026",
-    venue: "G Island",
-    location: "Maadi Corniche, Cairo, Egypt",
-    address: "G Island, Maadi Corniche, Cairo, Egypt",
-    mapsUrl: "https://maps.app.goo.gl/VX7pDkmttZymybXo8?g_st=ic",
-    coordinates: { lat: 29.9603, lng: 31.2569 },
+    venue: "G Island Hall",
+    location: "Nile Corniche, Maadi, Cairo, Egypt",
+    address: "G Island Hall, Nile Corniche, Maadi, Cairo Governorate 4210009, Egypt",
+    mapsUrl:
+      "https://www.google.com/maps/dir/?api=1&destination=29.98272%2C31.2836096&travelmode=driving&dir_action=navigate",
+    coordinates: { lat: 29.98272, lng: 31.2836096 },
   },
 
   hero: {
