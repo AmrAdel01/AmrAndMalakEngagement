@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "crypto";
 import { neon } from "@neondatabase/serverless";
+import {
+  cleanGuestMessageText,
+  isBlockedGuestMessageContent,
+} from "../src/utils/guestMessageModeration.js";
 
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 12;
@@ -7,43 +11,11 @@ const RATE_LIMIT_MAX = 5;
 const RATE_LIMIT_WINDOW_MINUTES = 10;
 const RATE_LIMIT_CLEANUP_MINUTES = 60;
 
-const BLOCKED_NAME_PATTERNS = [
-  /^RL_\d+$/i,
-  /^CORStest$/i,
-  /^SecTest$/i,
-  /^anonymous$/i,
-  /^ann?onymous$/i,
-];
-
-const BLOCKED_TEXT_PATTERNS = [
-  /^Rate limit test \d+$/i,
-  /^CORS test$/i,
-  /^test$/i,
-];
-
-const UNSAFE_MARKUP_PATTERN =
-  /<\s*\/?\s*[a-z!]|on[a-z]+\s*=|javascript\s*:|data\s*:/i;
-const UNSAFE_SQL_PATTERN =
-  /(--|;\s*(drop|delete|insert|update|alter|truncate)\b|\bunion\s+select\b|\bexists\s*\(\s*select\b|\bsleep\s*\(|\b(or|and)\b\s+['"`]?\w+['"`]?\s*=\s*['"`]?\w+['"`]?|^'+$)/i;
-
 function json(res, status, body) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(JSON.stringify(body));
-}
-
-function cleanText(value, maxLength) {
-  return String(value || "")
-    .split("")
-    .map((char) => {
-      const code = char.charCodeAt(0);
-      return code <= 31 || code === 127 ? " " : char;
-    })
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
 }
 
 function parsePageValue(value, fallback) {
@@ -82,36 +54,6 @@ async function ensureSchema(sql) {
   `;
 }
 
-async function deleteKnownSpam(sql) {
-  const exactSpamMessages = [
-    "test",
-    "CORS test",
-    "' OR 'x'='x",
-    "admin'--",
-    "' OR EXISTS(SELECT * FROM users)--",
-    "' AND 1=SLEEP(5)--",
-    "'; DROP TABLE messages; --",
-    "1' UNION SELECT NULL--",
-    "' OR 1=1--",
-    "' OR '1'='1",
-    "''",
-  ];
-
-  await sql`
-    DELETE FROM guest_messages
-    WHERE
-      name ~* '^RL_[0-9]+$'
-      OR name ~* '^CORStest$'
-      OR name ~* '^SecTest$'
-      OR name ~* '^ann?onymous$'
-      OR message ~* '^Rate limit test [0-9]+$'
-      OR message ILIKE '%<script%'
-      OR message ILIKE '%javascript:%'
-      OR name = ANY(${exactSpamMessages})
-      OR message = ANY(${exactSpamMessages})
-  `;
-}
-
 function getRequestHost(req) {
   const forwardedHost = String(req.headers["x-forwarded-host"] || "").split(",")[0].trim();
   return forwardedHost || req.headers.host || "";
@@ -133,17 +75,6 @@ function isSameOriginPost(req) {
   } catch {
     return false;
   }
-}
-
-function isBlockedContent(name, text) {
-  return (
-    UNSAFE_MARKUP_PATTERN.test(name) ||
-    UNSAFE_MARKUP_PATTERN.test(text) ||
-    UNSAFE_SQL_PATTERN.test(name) ||
-    UNSAFE_SQL_PATTERN.test(text) ||
-    BLOCKED_NAME_PATTERNS.some((pattern) => pattern.test(name)) ||
-    BLOCKED_TEXT_PATTERNS.some((pattern) => pattern.test(text))
-  );
 }
 
 function getClientKey(req) {
@@ -200,8 +131,10 @@ async function listMessages(req, res, sql) {
   `;
   const totals = await sql`SELECT COUNT(*)::int AS count FROM guest_messages`;
 
+  const visibleMessages = rows.filter((message) => !isBlockedGuestMessageContent(message.name, message.text));
+
   json(res, 200, {
-    messages: rows,
+    messages: visibleMessages,
     total: Number(totals[0]?.count || 0),
     databaseConfigured: true,
   });
@@ -228,15 +161,15 @@ async function createMessage(req, res, sql) {
     return;
   }
 
-  const name = cleanText(payload.name, 60);
-  const text = cleanText(payload.text, 500);
+  const name = cleanGuestMessageText(payload.name, 60);
+  const text = cleanGuestMessageText(payload.text, 500);
 
   if (!name || !text) {
     json(res, 400, { error: "Name and message are required." });
     return;
   }
 
-  if (isBlockedContent(name, text)) {
+  if (isBlockedGuestMessageContent(name, text)) {
     json(res, 400, { error: "Please use a real name and message without test text, HTML, or SQL." });
     return;
   }
@@ -292,7 +225,6 @@ export default async function handler(req, res) {
 
   try {
     await ensureSchema(sql);
-    await deleteKnownSpam(sql);
 
     if (req.method === "GET") {
       await listMessages(req, res, sql);

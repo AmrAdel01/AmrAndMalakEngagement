@@ -1,24 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { isBlockedGuestMessageContent } from "../utils/guestMessageModeration";
 
 const LEGACY_STORAGE_KEYS = ["engagement-guest-messages"];
 const STORAGE_KEY = "engagement-guest-messages-fresh-start";
 const PAGE_SIZE = 12;
-const UNSAFE_MARKUP_PATTERN =
-  /<\s*\/?\s*[a-z!]|on[a-z]+\s*=|javascript\s*:|data\s*:/i;
-const UNSAFE_SQL_PATTERN =
-  /(--|;\s*(drop|delete|insert|update|alter|truncate)\b|\bunion\s+select\b|\bexists\s*\(\s*select\b|\bsleep\s*\(|\b(or|and)\b\s+['"`]?\w+['"`]?\s*=\s*['"`]?\w+['"`]?|^'+$)/i;
-const BLOCKED_NAME_PATTERNS = [
-  /^RL_\d+$/i,
-  /^CORStest$/i,
-  /^SecTest$/i,
-  /^anonymous$/i,
-  /^ann?onymous$/i,
-];
-const BLOCKED_TEXT_PATTERNS = [
-  /^Rate limit test \d+$/i,
-  /^CORS test$/i,
-  /^test$/i,
-];
 
 function clearLegacyMessages() {
   LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
@@ -28,7 +13,7 @@ function readLocalMessages() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const messages = raw ? JSON.parse(raw) : [];
-    return messages.filter((message) => !isBlockedContent(message.name, message.text));
+    return messages.filter((message) => !isBlockedGuestMessageContent(message.name, message.text));
   } catch {
     return [];
   }
@@ -45,20 +30,6 @@ function normalizeMessage(message) {
     text: message.text,
     createdAt: message.createdAt || message.created_at || new Date().toISOString(),
   };
-}
-
-function isBlockedContent(name = "", text = "") {
-  const normalizedName = String(name).trim();
-  const normalizedText = String(text).trim();
-
-  return (
-    UNSAFE_MARKUP_PATTERN.test(normalizedName) ||
-    UNSAFE_MARKUP_PATTERN.test(normalizedText) ||
-    UNSAFE_SQL_PATTERN.test(normalizedName) ||
-    UNSAFE_SQL_PATTERN.test(normalizedText) ||
-    BLOCKED_NAME_PATTERNS.some((pattern) => pattern.test(normalizedName)) ||
-    BLOCKED_TEXT_PATTERNS.some((pattern) => pattern.test(normalizedText))
-  );
 }
 
 async function readErrorMessage(response) {
@@ -139,7 +110,7 @@ export function useGuestMessages() {
     const trimmedText = text.trim();
     if (!trimmedName || !trimmedText) return null;
 
-    if (isBlockedContent(trimmedName, trimmedText)) {
+    if (isBlockedGuestMessageContent(trimmedName, trimmedText)) {
       throw new Error("Please use a real name and message without test text, HTML, or SQL.");
     }
 
