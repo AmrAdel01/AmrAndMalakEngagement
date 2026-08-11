@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Heart, PenLine, Sparkles } from "lucide-react";
+import { Heart, MessageCircle, PenLine, RefreshCw, Sparkles } from "lucide-react";
 import SectionHeading from "../common/SectionHeading";
 import Reveal from "../common/Reveal";
 import { eventData } from "../../data/eventData";
@@ -43,14 +43,14 @@ function MessageCard({ message }) {
       initial={{ opacity: 0, y: 32, scale: 0.94 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-      className="relative overflow-hidden rounded-[15px] border border-champagne-200 bg-gradient-to-br from-white via-white to-ivory-100 shadow-card p-5 sm:p-6 md:p-7"
+      className="relative overflow-hidden rounded-[15px] border border-champagne-200 bg-gradient-to-br from-white via-white to-ivory-100 p-4 sm:p-5 shadow-card"
     >
-      <div className="flex items-center justify-between gap-4 border-b border-gold-400/15 pb-4">
+      <div className="flex items-center justify-between gap-4 border-b border-gold-400/15 pb-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] bg-ink-600 font-display text-xl italic leading-none text-white">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[15px] bg-ink-600 font-display text-lg italic leading-none text-white">
             {initial}
           </span>
-          <span className="truncate font-display text-xl italic text-ink-600">
+          <span className="truncate font-display text-lg sm:text-xl italic text-ink-600">
             {writer}
           </span>
         </div>
@@ -59,14 +59,14 @@ function MessageCard({ message }) {
         </span>
       </div>
 
-      <div className="relative pt-5">
+      <div className="relative pt-4">
         <p
-          className="pointer-events-none absolute -top-1 left-0 font-display text-5xl leading-none text-gold-400/25 select-none"
+          className="pointer-events-none absolute -top-1 left-0 font-display text-4xl leading-none text-gold-400/25 select-none"
           aria-hidden="true"
         >
           &ldquo;
         </p>
-        <p className="relative pl-8 font-body text-sm md:text-base leading-relaxed text-ink-500 whitespace-pre-wrap break-words">
+        <p className="relative pl-7 font-body text-sm leading-relaxed text-ink-500 whitespace-pre-wrap break-words">
           {message.text}
         </p>
       </div>
@@ -77,28 +77,39 @@ function MessageCard({ message }) {
 export default function GuestMessages() {
   const { heading, subheading, namePlaceholder, messagePlaceholder, submitLabel, successMessage } =
     eventData.messages;
-  const { messages: guestMessages, addMessage } = useGuestMessages();
+  const {
+    messages: guestMessages,
+    total,
+    hasMore,
+    loading,
+    loadingMore,
+    usingLocalFallback,
+    error: messagesError,
+    addMessage,
+    refresh,
+    loadMore,
+  } = useGuestMessages();
 
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [justSent, setJustSent] = useState(false);
-  const [error, setError] = useState("");
+  const [formError, setFormError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setFormError("");
 
     const trimmedName = name.trim();
     const trimmedText = text.trim();
 
     if (!trimmedName || !trimmedText) {
-      setError("Please share your name and a short message.");
+      setFormError("Please share your name and a short message.");
       return;
     }
 
     if (trimmedText.length > 500) {
-      setError("Please keep your message under 500 characters.");
+      setFormError("Please keep your message under 500 characters.");
       return;
     }
 
@@ -116,12 +127,15 @@ export default function GuestMessages() {
       }
     }
 
-    addMessage({ name: trimmedName, text: trimmedText });
-    setName("");
-    setText("");
-    setSubmitting(false);
-    setJustSent(true);
-    setTimeout(() => setJustSent(false), 2800);
+    try {
+      await addMessage({ name: trimmedName, text: trimmedText });
+      setName("");
+      setText("");
+      setJustSent(true);
+      setTimeout(() => setJustSent(false), 2800);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -172,8 +186,8 @@ export default function GuestMessages() {
                   />
                 </div>
 
-                {error && (
-                  <p className="font-body text-sm text-ink-500">{error}</p>
+                {formError && (
+                  <p className="font-body text-sm text-ink-500">{formError}</p>
                 )}
 
                 <button
@@ -201,24 +215,81 @@ export default function GuestMessages() {
             </div>
           </Reveal>
 
-          <div className="space-y-5">
-            {guestMessages.length === 0 ? (
-              <Reveal delay={0.1}>
-                <div className="rounded-[15px] border border-dashed border-champagne-200 bg-ivory-100 p-8 sm:p-10 text-center">
+          <Reveal delay={0.1}>
+            <div className="overflow-hidden rounded-[15px] border border-champagne-200 bg-white shadow-card">
+              <div className="flex items-center justify-between gap-4 border-b border-champagne-200 bg-ivory-100/80 px-4 py-4 sm:px-5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle size={17} strokeWidth={1.5} className="text-gold-500" />
+                    <h3 className="font-display text-xl italic text-ink-600">
+                      Guest Notes
+                    </h3>
+                  </div>
+                  <p className="mt-1 font-body text-xs uppercase tracking-wide text-ink-400">
+                    {total} {total === 1 ? "message" : "messages"}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={refresh}
+                  disabled={loading}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[15px] border border-champagne-200 text-ink-500 transition-colors hover:border-gold-500 hover:text-gold-600 disabled:opacity-50"
+                  aria-label="Refresh guest messages"
+                >
+                  <RefreshCw size={16} strokeWidth={1.5} className={loading ? "animate-spin" : ""} />
+                </button>
+              </div>
+
+              {usingLocalFallback && messagesError && (
+                <div className="border-b border-champagne-200 bg-ivory-100 px-4 py-3 font-body text-xs leading-relaxed text-ink-400 sm:px-5">
+                  {messagesError}
+                </div>
+              )}
+
+              {loading ? (
+                <div className="space-y-4 p-4 sm:p-5">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="rounded-[15px] border border-champagne-200 bg-ivory-100 p-4">
+                      <div className="mb-4 h-4 w-32 rounded-[15px] bg-champagne-200" />
+                      <div className="h-3 w-full rounded-[15px] bg-champagne-200" />
+                      <div className="mt-2 h-3 w-2/3 rounded-[15px] bg-champagne-200" />
+                    </div>
+                  ))}
+                </div>
+              ) : guestMessages.length === 0 ? (
+                <div className="p-8 sm:p-10 text-center">
                   <Heart size={24} strokeWidth={1.25} className="text-gold-500/60 mx-auto mb-4" />
                   <p className="font-display italic text-xl text-ink-500">
                     Be the first to leave a beautiful note for us.
                   </p>
                 </div>
-              </Reveal>
-            ) : (
-              <AnimatePresence mode="popLayout">
-                {guestMessages.map((message) => (
-                  <MessageCard key={message.id} message={message} />
-                ))}
-              </AnimatePresence>
-            )}
-          </div>
+              ) : (
+                <>
+                  <div className="max-h-[620px] space-y-4 overflow-y-auto p-4 sm:p-5">
+                    <AnimatePresence mode="popLayout">
+                      {guestMessages.map((message) => (
+                        <MessageCard key={message.id} message={message} />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+
+                  {hasMore && (
+                    <div className="border-t border-champagne-200 p-4 sm:p-5">
+                      <button
+                        type="button"
+                        onClick={loadMore}
+                        disabled={loadingMore}
+                        className="w-full rounded-[15px] border border-gold-500 px-5 py-3 font-body text-xs uppercase tracking-wide text-gold-600 transition-colors hover:bg-gold-500 hover:text-white disabled:opacity-60"
+                      >
+                        {loadingMore ? "Loading..." : "Show more notes"}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </Reveal>
         </div>
       </div>
     </section>

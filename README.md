@@ -10,7 +10,7 @@ A premium one-page engagement website built with React, Vite, Tailwind CSS, and 
 - Countdown
 - Event details
 - Location and directions
-- Guest messages
+- Guest messages backed by a Vercel API and Postgres database
 - Footer and sharing
 
 The story timeline, childhood memories section, and background music have been removed from the live site.
@@ -39,6 +39,18 @@ Most content lives in `src/data/eventData.js`.
 | Guest messages copy | `messages.*` |
 | WhatsApp share text | `social.whatsappShareText` |
 | Navigation links | `navigation` |
+
+## Guest Messages Database
+
+The `Words for Us` section uses `/api/messages` to read and save messages in Postgres. The Vercel project is connected to the Neon resource `neon-violet-village`, which provides:
+
+```text
+DATABASE_URL=postgresql://user:password@host/database?sslmode=require
+```
+
+The API creates the `guest_messages` table automatically the first time it runs.
+
+If `DATABASE_URL` is missing, the site falls back to browser-only storage so the form still works while the database is being connected.
 
 ## Deploy
 
